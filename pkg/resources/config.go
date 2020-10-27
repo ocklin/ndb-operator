@@ -12,20 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package controllers
+package resources
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/ocklin/ndb-operator/pkg/apis/ndbcontroller/v1alpha1"
 	"github.com/ocklin/ndb-operator/pkg/constants"
 )
-
-type ConfigControl struct {
-}
 
 func getMgmdHostname(ndb *v1alpha1.Ndb, count int) string {
 	dnsZone := fmt.Sprintf("%s.svc.cluster.local", ndb.Namespace)
@@ -39,17 +35,7 @@ func getNdbdHostname(ndb *v1alpha1.Ndb, count int) string {
 	return mgmHostname
 }
 
-func (cc ConfigControl) WriteConfig(ndb *v1alpha1.Ndb) error {
-
-	//filename := constants.DataDir + "/config.ini"
-	filename := "config.ini"
-
-	f, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-
-	defer f.Close()
+func GetConfigString(ndb *v1alpha1.Ndb) (string, error) {
 
 	defaultSections := `
   [ndbd default]
@@ -111,11 +97,5 @@ func (cc ConfigControl) WriteConfig(ndb *v1alpha1.Ndb) error {
 	for _, line := range s {
 		configString += strings.TrimSpace(line) + "\n"
 	}
-
-	_, err = f.WriteString(configString)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return configString, nil
 }
