@@ -50,15 +50,14 @@ type StatefulSetInterface interface {
 type baseStatefulSet struct {
 	typeName    string
 	clusterName string
-	serviceName string
 }
 
-func NewMgmdStatefulSet(cluster *v1alpha1.Ndb, serviceName string) *baseStatefulSet {
-	return &baseStatefulSet{typeName: "mgmd", clusterName: cluster.Name, serviceName: serviceName}
+func NewMgmdStatefulSet(cluster *v1alpha1.Ndb) *baseStatefulSet {
+	return &baseStatefulSet{typeName: "mgmd", clusterName: cluster.Name}
 }
 
-func NewNdbdStatefulSet(cluster *v1alpha1.Ndb, serviceName string) *baseStatefulSet {
-	return &baseStatefulSet{typeName: "ndbd", clusterName: cluster.Name, serviceName: serviceName}
+func NewNdbdStatefulSet(cluster *v1alpha1.Ndb) *baseStatefulSet {
+	return &baseStatefulSet{typeName: "ndbd", clusterName: cluster.Name}
 }
 
 func volumeMounts(cluster *v1alpha1.Ndb) []v1.VolumeMount {
@@ -260,7 +259,7 @@ func (bss *baseStatefulSet) GetName() string {
 }
 
 // NewForCluster creates a new StatefulSet for the given Cluster.
-func (bss *baseStatefulSet) NewStatefulSet(cluster *v1alpha1.Ndb) *apps.StatefulSet {
+func (bss *baseStatefulSet) NewStatefulSet(ndb *v1alpha1.Ndb) *apps.StatefulSet {
 
 	// If a PV isn't specified just use a EmptyDir volume
 	var podVolumes = []v1.Volume{}
@@ -280,9 +279,7 @@ func (bss *baseStatefulSet) NewStatefulSet(cluster *v1alpha1.Ndb) *apps.Stateful
 		VolumeSource: v1.VolumeSource{
 			ConfigMap: &v1.ConfigMapVolumeSource{
 				LocalObjectReference: v1.LocalObjectReference{
-					//Name: cluster.Spec.Config.Name,
-					//TODO: obviously get a useful name
-					Name: "ndb-config-ini",
+					Name: ndb.GetConfigMapName(),
 				},
 			},
 		},
@@ -291,27 +288,26 @@ func (bss *baseStatefulSet) NewStatefulSet(cluster *v1alpha1.Ndb) *apps.Stateful
 
 	containers := []v1.Container{}
 	serviceaccount := ""
-
+	var podLabels map[string]string
 	replicas := func(i int32) *int32 { return &i }((0))
+
 	if bss.typeName == "mgmd" {
 		containers = []v1.Container{
-			bss.mgmdContainer(cluster),
-			//agentContainer(cluster, ndbAgentImage),
+			//bss.mgmdContainer(cluster),
+			agentContainer(ndb, ndbAgentImage),
 		}
 		serviceaccount = "ndb-agent"
-		replicas = cluster.Spec.Mgmd.NodeCount
+		replicas = ndb.Spec.Mgmd.NodeCount
+		podLabels = ndb.GetManagementNodeLabels()
 
 	} else {
 		containers = []v1.Container{
-			bss.ndbmtdContainer(cluster),
-			//agentContainer(cluster, ndbAgentImage),
+			//bss.ndbmtdContainer(cluster),
+			agentContainer(ndb, ndbAgentImage),
 		}
 		serviceaccount = "ndb-agent"
-		replicas = cluster.Spec.Ndbd.NodeCount
-	}
-
-	podLabels := map[string]string{
-		constants.ClusterLabel: cluster.Name,
+		replicas = ndb.Spec.Ndbd.NodeCount
+		podLabels = ndb.GetDataNodeLabels()
 	}
 
 	podspec := v1.PodSpec{
@@ -328,7 +324,7 @@ func (bss *baseStatefulSet) NewStatefulSet(cluster *v1alpha1.Ndb) *apps.Stateful
 			Labels: podLabels, // must match templates
 			// could have a owner reference here
 			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(cluster, schema.GroupVersionKind{
+				*metav1.NewControllerRef(ndb, schema.GroupVersionKind{
 					Group:   v1.SchemeGroupVersion.Group,
 					Version: v1.SchemeGroupVersion.Version,
 					Kind:    "Ndb",
@@ -348,7 +344,7 @@ func (bss *baseStatefulSet) NewStatefulSet(cluster *v1alpha1.Ndb) *apps.Stateful
 				},
 				Spec: podspec,
 			},
-			ServiceName: bss.serviceName,
+			ServiceName: ndb.GetServiceName(),
 		},
 	}
 	return ss
