@@ -193,6 +193,7 @@ func (bss *baseStatefulSet) mgmdContainer(ndb *v1alpha1.Ndb) v1.Container {
 			"--configdir=/var/lib/ndb",
 			"--initial",
 			"--nodaemon",
+			"--config-cache=0",
 			"-v",
 		}
 		cmdArgs := strings.Join(args, " ")
@@ -290,6 +291,7 @@ func (bss *baseStatefulSet) NewStatefulSet(ndb *v1alpha1.Ndb) *apps.StatefulSet 
 	serviceaccount := ""
 	var podLabels map[string]string
 	replicas := func(i int32) *int32 { return &i }((0))
+	svcName := ""
 
 	if bss.typeName == "mgmd" {
 		containers = []v1.Container{
@@ -299,6 +301,7 @@ func (bss *baseStatefulSet) NewStatefulSet(ndb *v1alpha1.Ndb) *apps.StatefulSet 
 		serviceaccount = "ndb-agent"
 		replicas = ndb.Spec.Mgmd.NodeCount
 		podLabels = ndb.GetManagementNodeLabels()
+		svcName = ndb.GetManagementServiceName()
 
 	} else {
 		containers = []v1.Container{
@@ -308,6 +311,7 @@ func (bss *baseStatefulSet) NewStatefulSet(ndb *v1alpha1.Ndb) *apps.StatefulSet 
 		serviceaccount = "ndb-agent"
 		replicas = ndb.Spec.Ndbd.NodeCount
 		podLabels = ndb.GetDataNodeLabels()
+		svcName = ndb.GetDataNodeServiceName()
 	}
 
 	podspec := v1.PodSpec{
@@ -332,6 +336,10 @@ func (bss *baseStatefulSet) NewStatefulSet(ndb *v1alpha1.Ndb) *apps.StatefulSet 
 			},
 		},
 		Spec: apps.StatefulSetSpec{
+			UpdateStrategy: apps.StatefulSetUpdateStrategy{
+				// we want to be able to control ndbd node restarts directly
+				Type: apps.OnDeleteStatefulSetStrategyType,
+			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: podLabels,
 			},
@@ -344,7 +352,7 @@ func (bss *baseStatefulSet) NewStatefulSet(ndb *v1alpha1.Ndb) *apps.StatefulSet 
 				},
 				Spec: podspec,
 			},
-			ServiceName: ndb.GetServiceName(),
+			ServiceName: svcName,
 		},
 	}
 	return ss
