@@ -31,7 +31,11 @@ func Test_GetConfigHashAndGenerationFromConfig(t *testing.T) {
 	ConfigGenerationNumber=4711
 	`
 
-	hash, generation := GetConfigHashAndGenerationFromConfig(testini)
+	hash, generation, err := GetConfigHashAndGenerationFromConfig(testini)
+
+	if err != nil {
+		t.Errorf("extracting hash or generation failed : %s", err)
+	}
 
 	if hash != "asdasdlkajhhnxh=?" {
 		t.Fail()
